@@ -22,7 +22,7 @@ IA_SAVEWEBPAGE_URI = "http://web.archive.org/save/"
 
 s = sched.scheduler(time.time, time.sleep)
 
-lastTweetIdRespondedTo = -1
+lastTweetIdRespondedTo = None
 
 # Twitter maximum 2400 tweets per day
 # = .027 tweets/sec = 1.67 tweets/min, so check every 101 seconds
@@ -51,49 +51,56 @@ def runLoop(sc):
 
   
   for tweet in tweets:
-    #print tweet['id_str'], '\n', tweet['text'], '\n\n\n'
-    if str(tweet['id']) == str(lastTweetIdRespondedTo):
-      print "Newest hashtagged tweet has already been replied to."
-      invokeNextPoll()
-      return
-    else:
-      print "New tweet w/ id "+str(tweet['id'])+" != "+str(lastTweetIdRespondedTo)
-    lastTweetIdRespondedTo = tweet['id']
-    
-    if 'url' not in tweet['user']['entities']:
-      # No URI in tweet
-      invokeNextPoll()
-      return
-    
-    
-    urls = tweet['user']['entities']['url']['urls']
     dateCreated = tweet['user']['created_at']
- 
     #Convert date
     # From Thu Feb 13 12:16:09 +0000 2014 
     # To   Thu, 13 Feb 2014 12:16:09 GMT
     dt = parser.parse(dateCreated)
+  
+    #print tweet['id_str'], '\n', tweet['text'], '\n\n\n'
+    # Tweets aren't guaranteed to be temporally sorted or in the right order. use dates
+    if lastTweetIdRespondedTo and dt <= lastTweetIdRespondedTo:
+      print "Newest hashtagged tweet has already been replied to."
+      invokeNextPoll()
+      return
+    else:
+      print "New tweet at "+str(dt)+" > "+str(lastTweetIdRespondedTo)
+    lastTweetIdRespondedTo = dt
+    
+    
+    if len(tweet['entities']['urls']) == 0 or not tweet['entities']['urls'][0]['url']:
+      # No URI in tweet
+      print "No url in tweet: " + tweet['text']
+      invokeNextPoll()
+      return
+    
+    
+    url = tweet['entities']['urls'][0]['expanded_url']
+    
+ 
+    
     format = 'EEE, dd LLL yyyy hh:mm:ss'
     acceptDatetime = format_datetime(dt, format, locale='en') + ' GMT'
   
 
-
-  
-    for url in urls:
-      print "URI found in tweet: " + url['expanded_url']
+     
+    dumbLoop = 0
+    while dumbLoop < 1:
+      dumbLoop += 1
+      print "URI found in tweet: " + url
       #print MEMENTO_AGGREGATOR_TIMEGATE + "http://matkelly.com"
       print "Querying aggregator at "
-      print " * " + MEMENTO_AGGREGATOR_TIMEGATE + url['expanded_url']
+      print " * " + MEMENTO_AGGREGATOR_TIMEGATE + url
       print " * Accept-Datetime: " + acceptDatetime
-      request = urllib2.Request(MEMENTO_AGGREGATOR_TIMEGATE + url['expanded_url'], headers={"Accept-Datetime" : acceptDatetime})
+      request = urllib2.Request(MEMENTO_AGGREGATOR_TIMEGATE + url, headers={"Accept-Datetime" : acceptDatetime})
       #request = urllib2.Request(MEMENTO_AGGREGATOR_TIMEGATE + "http://matkelly.com", headers={"Accept-Datetime" : acceptDatetime})
       try:
         response = urllib2.urlopen(request)
       except urllib2.HTTPError, e:
         if e.code == 404:
           print "We got a 404, submitting to the archive."
-          print " * " + IA_SAVEWEBPAGE_URI + url['expanded_url']
-          request2 = urllib2.Request(IA_SAVEWEBPAGE_URI + url['expanded_url'])
+          print " * " + IA_SAVEWEBPAGE_URI + url
+          request2 = urllib2.Request(IA_SAVEWEBPAGE_URI + url)
           
           try:
             response2 = urllib2.urlopen(request2)
